@@ -114,4 +114,14 @@ def str_replace(path: str, old_str: str, new_str: str) -> str:
             return f"✅ Successfully updated '{path}'."                                                                                                                                                                                                                 
                                                                                                                                                                                                                                                                         
         except Exception as e:                                                                                                                                                                                                                                          
-            return f"⚠️ [Tool Error editing '{path}']: {e}"      
+            return f"⚠️ [Tool Error editing '{path}']: {e}"     
+
+
+# --- The Tool Registry ---                                                                                                                                                                                                               
+# Maps tool names (from XML tags) to the actual Python functions                                                                                                                                                                             
+TOOL_REGISTRY = {                                                                                                                                                                                                                            
+    "read_file": read_file,                                                                                                                                                                                                                  
+    "write_file": write_file,                                                                                                                                                                                                                
+    "str_replace": str_replace,                                                                                                                                                                                                              
+    "run_cmd": run_cmd                                                                                                                                                                                                                       
+}                       
