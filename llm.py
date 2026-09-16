@@ -11,7 +11,7 @@ client = OpenAI(
     api_key=OLLAMA_API_KEY  # required by the client but unused by Ollama
 )
 
-# 2. Clean System prompt for 7B/14B Qwen models (No reserved control tokens)
+# 2. Concrete System prompt for 7B/14B Qwen models
 SYSTEM_PROMPT = """You are a coding agent working in the user's project directory.
 
 Available Tools:
@@ -20,14 +20,21 @@ Available Tools:
 3. str_replace(path: str, old_str: str, new_str: str)
 4. run_cmd(command: str)
 
-When you need to execute a tool, output XML in this exact format:
-<tool>tool_name</tool>
+When you need to execute a tool, output XML using the real argument names:
+Examples:
+<tool>read_file</tool>
 <args>
-<arg_name>value</arg_name>
+<path>llm.py</path>
+</args>
+
+<tool>run_cmd</tool>
+<args>
+<command>dir</command>
 </args>
 
 Rules:
 - When you need to take an action, output the tool call.
+- Use the exact argument names (path, content, old_str, new_str, command).
 - Never invent tool outputs yourself.
 - When asked to show, read, or inspect files, present the relevant code or content back to the user in markdown.
 - When finished or replying to the user, speak in regular conversational text.
@@ -60,6 +67,53 @@ def generate_response(messages: list, model: str = DEFAULT_MODEL, temperature: f
     # 2. Check for Text / XML / Fallback Content
     return message.content or ""
 
+
+def normalize_tool_args(tool_name: str, args_dict: dict) -> dict:
+    """
+    Normalizes argument dictionaries from small models (like 7B) that may output
+    <arg_name>path</arg_name><value>file.py</value> or generic parameter keys.
+    """
+    if not isinstance(args_dict, dict):
+        return {}
+
+    # Case 1: Model literally split <arg_name> and <value>
+    if "arg_name" in args_dict and "value" in args_dict:
+        k = args_dict.pop("arg_name").strip()
+        v = args_dict.pop("value").strip()
+        args_dict[k] = v
+
+    # Case 2: Model output <arg_name>llm.py</arg_name> or generic keys
+    if tool_name == "read_file" and "path" not in args_dict:
+        for possible_key in ["arg_name", "file", "filename", "filepath", "value"]:
+            if possible_key in args_dict:
+                args_dict["path"] = args_dict.pop(possible_key)
+                break
+        if "path" not in args_dict and len(args_dict) == 1:
+            args_dict["path"] = list(args_dict.values())[0]
+
+    elif tool_name == "run_cmd" and "command" not in args_dict:
+        for possible_key in ["cmd", "arg_name", "value"]:
+            if possible_key in args_dict:
+                args_dict["command"] = args_dict.pop(possible_key)
+                break
+        if "command" not in args_dict and len(args_dict) == 1:
+            args_dict["command"] = list(args_dict.values())[0]
+
+    elif tool_name == "write_file":
+        if "path" not in args_dict:
+            for possible_key in ["file", "filename", "filepath"]:
+                if possible_key in args_dict:
+                    args_dict["path"] = args_dict.pop(possible_key)
+                    break
+        if "content" not in args_dict:
+            for possible_key in ["text", "code", "body", "value"]:
+                if possible_key in args_dict:
+                    args_dict["content"] = args_dict.pop(possible_key)
+                    break
+
+    return args_dict
+
+
 # 4. Multi-Format Tool Call Extractor (XML tags, JSON, & Native Python AST)
 def extract_tool_call(response_text: str):
     """
@@ -77,7 +131,7 @@ def extract_tool_call(response_text: str):
     try:
         data = json.loads(response_text.strip())
         if isinstance(data, dict) and "tool" in data and "args" in data:
-            return data
+            return {"tool": data["tool"], "args": normalize_tool_args(data["tool"], data["args"])}
     except (json.JSONDecodeError, ValueError):
         pass
 
@@ -95,7 +149,7 @@ def extract_tool_call(response_text: str):
                 args_dict[param_name] = param_val.strip()
 
         if tool_name in ["read_file", "write_file", "str_replace", "run_cmd"]:
-            return {"tool": tool_name, "args": args_dict}
+            return {"tool": tool_name, "args": normalize_tool_args(tool_name, args_dict)}
 
     # 3. Match <tool_call>{...}</tool_call>
     match = re.search(r"<tool_call>\s*(\{.*?\})\s*(?:</tool_call>|$)", response_text, re.DOTALL)
@@ -103,7 +157,7 @@ def extract_tool_call(response_text: str):
         try:
             data = json.loads(match.group(1))
             if "tool" in data and "args" in data:
-                return data
+                return {"tool": data["tool"], "args": normalize_tool_args(data["tool"], data["args"])}
         except json.JSONDecodeError:
             pass
 
@@ -113,7 +167,7 @@ def extract_tool_call(response_text: str):
         try:
             data = json.loads(json_match.group(1))
             if "tool" in data and "args" in data:
-                return data
+                return {"tool": data["tool"], "args": normalize_tool_args(data["tool"], data["args"])}
         except json.JSONDecodeError:
             pass
 
@@ -146,7 +200,7 @@ def extract_tool_call(response_text: str):
                             "new_str": ast.literal_eval(node.args[2])
                         }
                     if args_dict:
-                        return {"tool": tool_name, "args": args_dict}
+                        return {"tool": tool_name, "args": normalize_tool_args(tool_name, args_dict)}
     except Exception:
         pass
 

@@ -71,7 +71,9 @@ def check_permission(tool_name: str, args: dict, auto_approve_reads: bool = True
         return False, f"⚠️ [User Rejected]: Permission denied by user for {tool_name} on '{path}'."                                                                   
                                                                                                                                                                         
     if tool_name == "run_cmd":                                                                                                                                        
-        command = args.get("command", "")                                                                                                                             
+        command = args.get("command", "").strip()                                                                                                                     
+        if not command:                                                                                                                                               
+            return False, "⚠️ [Security Block]: Command cannot be empty."                                                                                             
                                                                                                                                                                         
         is_safe, reason = is_safe_command(command)                                                                                                                    
         if not is_safe:                                                                                                                                               
