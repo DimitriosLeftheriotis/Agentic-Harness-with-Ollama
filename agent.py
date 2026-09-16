@@ -98,7 +98,7 @@ def main():
                 history.add_assistant_message(response_text)
                 history.save_session()
 
-                clean_reply = re.sub(r"<tool_call>.*?</tool_call>", "", response_text, flags=re.DOTALL).strip()
+                clean_reply = re.sub(r"```xml.*?```|<tool_call>.*?</tool_call>|<tool>.*?</args>|<tool>.*?</tool>", "", response_text, flags=re.DOTALL).strip()
                 if clean_reply:
                     print(f"\nAgent > {clean_reply}")
                 break

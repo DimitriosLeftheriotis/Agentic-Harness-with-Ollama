@@ -31,7 +31,7 @@ Assistant:
 
 RULES:
 - When you need to take an action, output ONLY the <tool_call>.
-- STOP generating immediately after </tool_call>.
+- STOP generating immediately after closing tags.
 - NEVER invent tool outputs yourself. Wait for execution results.
 - When finished, reply with regular text.
 """
@@ -40,31 +40,36 @@ RULES:
 def generate_response(messages: list, model: str = DEFAULT_MODEL, temperature: float = DEFAULT_TEMPERATURE) -> str:
     """
     Sends the conversation history to Ollama and returns the generated text.
-    Enforces stop=["</tool_call>"] to prevent tool hallucination.
+    Enforces stop tokens to prevent tool hallucination.
     """
     response = client.chat.completions.create(
         model=model,
         messages=messages,
         temperature=temperature,
-        stop=["</tool_call>"]  # Hard stop at the end of the tool call
+        stop=["</tool_call>", "</args>", "</xml>"]
     )
 
     text = response.choices[0].message.content or ""
 
-    # Ollama strips the stop sequence </tool_call> from the output.
-    # We re-attach </tool_call> so our regex extractor has a complete tag.
+    # If the model hit a stop sequence, re-attach it so parsers have complete blocks
     if "<tool_call>" in text and not text.strip().endswith("</tool_call>"):
         text = text.strip() + "\n</tool_call>"
+    elif "<args>" in text and not text.strip().endswith("</args>") and not text.strip().endswith("</xml>"):
+        text = text.strip() + "\n</args>"
 
     return text
 
-# 4. Multi-Format Tool Call Extractor (XML, JSON, & Native Python AST)
+# 4. Multi-Format Tool Call Extractor (XML tags, JSON, & Native Python AST)
 def extract_tool_call(response_text: str):
     """
-    Extracts tool calls from XML tags, raw JSON, or Python code blocks.
+    Extracts tool calls from:
+    1. <tool_call>{JSON}</tool_call>
+    2. Pure XML tags: <tool>name</tool><args><key>val</key></args>
+    3. Raw JSON: {"tool": "...", "args": {...}}
+    4. Python code blocks: write_file("...", "...")
     Returns: dict {"tool": "...", "args": {...}} or None.
     """
-    # 1. Primary: Match <tool_call>{...}</tool_call> (or unclosed tag)
+    # 1. Primary: Match <tool_call>{...}</tool_call>
     match = re.search(r"<tool_call>\s*(\{.*?\})\s*(?:</tool_call>|$)", response_text, re.DOTALL)
     if match:
         try:
@@ -74,7 +79,24 @@ def extract_tool_call(response_text: str):
         except json.JSONDecodeError:
             pass
 
-    # 2. Fallback: Search for any JSON block containing "tool" and "args"
+    # 2. Pure XML Tags: <tool>read_file</tool><args><path>llm.py</path></args>
+    tool_tag_match = re.search(r"<tool>\s*(\w+)\s*</tool>", response_text)
+    if tool_tag_match:
+        tool_name = tool_tag_match.group(1).strip()
+        args_dict = {}
+
+        args_block_match = re.search(r"<args>\s*(.*?)\s*(?:</args>|</xml>|$)", response_text, re.DOTALL)
+        if args_block_match:
+            args_content = args_block_match.group(1)
+            # Match each <param_name>param_value</param_name>
+            param_matches = re.findall(r"<(\w+)>\s*(.*?)\s*</\1>", args_content, re.DOTALL)
+            for param_name, param_val in param_matches:
+                args_dict[param_name] = param_val.strip()
+
+        if tool_name in ["read_file", "write_file", "str_replace", "run_cmd"]:
+            return {"tool": tool_name, "args": args_dict}
+
+    # 3. Fallback: Search for any JSON block containing "tool" and "args"
     json_match = re.search(r'(\{\s*"tool"\s*:\s*".*?"\s*,\s*"args"\s*:\s*\{.*?\}\s*\})', response_text, re.DOTALL)
     if json_match:
         try:
@@ -84,7 +106,7 @@ def extract_tool_call(response_text: str):
         except json.JSONDecodeError:
             pass
 
-    # 3. Fallback: Native Python AST Parsing (handles ```python ... ``` code blocks safely)
+    # 4. Fallback: Native Python AST Parsing (handles ```python ... ``` code blocks safely)
     code_text = response_text
     code_block_match = re.search(r"```(?:python)?\s*(.*?)\s*```", response_text, re.DOTALL)
     if code_block_match:
