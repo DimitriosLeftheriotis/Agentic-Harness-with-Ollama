@@ -58,10 +58,10 @@ def generate_response(messages: list, model: str = DEFAULT_MODEL, temperature: f
 
     return text
 
-# 4. Multi-Format Tool Call Extractor (XML, JSON, & Python syntax)
+# 4. Multi-Format Tool Call Extractor (XML, JSON, & Native Python AST)
 def extract_tool_call(response_text: str):
     """
-    Extracts tool calls from XML tags, raw JSON, or direct Python call syntax.
+    Extracts tool calls from XML tags, raw JSON, or Python code blocks.
     Returns: dict {"tool": "...", "args": {...}} or None.
     """
     # 1. Primary: Match <tool_call>{...}</tool_call> (or unclosed tag)
@@ -84,35 +84,37 @@ def extract_tool_call(response_text: str):
         except json.JSONDecodeError:
             pass
 
-    # 3. Fallback: Python-style function call like write_file("hello.py", "...")
-    for tool_name in ["read_file", "write_file", "str_replace", "run_cmd"]:
-        py_match = re.search(rf'\b{tool_name}\s*\((.*?)\)', response_text, re.DOTALL)
-        if py_match:
-            try:
-                fake_call = f"{tool_name}({py_match.group(1)})"
-                tree = ast.parse(fake_call)
-                call_node = tree.body[0].value
-                args_dict = {}
+    # 3. Fallback: Native Python AST Parsing (handles ```python ... ``` code blocks safely)
+    code_text = response_text
+    code_block_match = re.search(r"```(?:python)?\s*(.*?)\s*```", response_text, re.DOTALL)
+    if code_block_match:
+        code_text = code_block_match.group(1)
 
-                if tool_name == "write_file" and len(call_node.args) >= 2:
-                    args_dict = {
-                        "path": ast.literal_eval(call_node.args[0]),
-                        "content": ast.literal_eval(call_node.args[1])
-                    }
-                elif tool_name == "read_file" and len(call_node.args) >= 1:
-                    args_dict = {"path": ast.literal_eval(call_node.args[0])}
-                elif tool_name == "run_cmd" and len(call_node.args) >= 1:
-                    args_dict = {"command": ast.literal_eval(call_node.args[0])}
-                elif tool_name == "str_replace" and len(call_node.args) >= 3:
-                    args_dict = {
-                        "path": ast.literal_eval(call_node.args[0]),
-                        "old_str": ast.literal_eval(call_node.args[1]),
-                        "new_str": ast.literal_eval(call_node.args[2])
-                    }
-
-                if args_dict:
-                    return {"tool": tool_name, "args": args_dict}
-            except Exception:
-                pass
+    try:
+        tree = ast.parse(code_text.strip())
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+                tool_name = node.func.id
+                if tool_name in ["read_file", "write_file", "str_replace", "run_cmd"]:
+                    args_dict = {}
+                    if tool_name == "write_file" and len(node.args) >= 2:
+                        args_dict = {
+                            "path": ast.literal_eval(node.args[0]),
+                            "content": ast.literal_eval(node.args[1])
+                        }
+                    elif tool_name == "read_file" and len(node.args) >= 1:
+                        args_dict = {"path": ast.literal_eval(node.args[0])}
+                    elif tool_name == "run_cmd" and len(node.args) >= 1:
+                        args_dict = {"command": ast.literal_eval(node.args[0])}
+                    elif tool_name == "str_replace" and len(node.args) >= 3:
+                        args_dict = {
+                            "path": ast.literal_eval(node.args[0]),
+                            "old_str": ast.literal_eval(node.args[1]),
+                            "new_str": ast.literal_eval(node.args[2])
+                        }
+                    if args_dict:
+                        return {"tool": tool_name, "args": args_dict}
+    except Exception:
+        pass
 
     return None
