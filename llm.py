@@ -35,10 +35,10 @@ RULES:
 - When finished, reply with regular text.
 """
 
-# 3. The LLM Caller Function
+# 3. The LLM Caller Function (Supports Native Tool Calls + Text)
 def generate_response(messages: list, model: str = DEFAULT_MODEL, temperature: float = DEFAULT_TEMPERATURE) -> str:
     """
-    Sends the conversation history to Ollama and returns the generated text.
+    Sends the conversation history to Ollama and returns generated text or native tool calls.
     """
     response = client.chat.completions.create(
         model=model,
@@ -46,19 +46,41 @@ def generate_response(messages: list, model: str = DEFAULT_MODEL, temperature: f
         temperature=temperature
     )
 
-    return response.choices[0].message.content or ""
+    choice = response.choices[0]
+    message = choice.message
+
+    # 1. Check for Native Ollama / OpenAI Tool Calls (Standard in 14B models)
+    if message.tool_calls:
+        tool_call = message.tool_calls[0]
+        func_name = tool_call.function.name
+        try:
+            func_args = json.loads(tool_call.function.arguments)
+        except Exception:
+            func_args = {}
+        return json.dumps({"tool": func_name, "args": func_args})
+
+    # 2. Check for Text / XML / Fallback Content (7B model and normal text)
+    return message.content or ""
 
 # 4. Multi-Format Tool Call Extractor (XML tags, JSON, & Native Python AST)
 def extract_tool_call(response_text: str):
     """
     Extracts tool calls from:
-    1. <tool_call>{JSON}</tool_call>
-    2. Pure XML tags: <tool>name</tool><args><key>val</key></args>
-    3. Raw JSON: {"tool": "...", "args": {...}}
+    1. Direct JSON: {"tool": "...", "args": {...}}
+    2. <tool_call>{JSON}</tool_call>
+    3. Pure XML tags: <tool>name</tool><args><key>val</key></args>
     4. Python code blocks: write_file("...", "...")
     Returns: dict {"tool": "...", "args": {...}} or None.
     """
-    # 1. Primary: Match <tool_call>{...}</tool_call>
+    # 1. Direct JSON string
+    try:
+        data = json.loads(response_text.strip())
+        if isinstance(data, dict) and "tool" in data and "args" in data:
+            return data
+    except (json.JSONDecodeError, ValueError):
+        pass
+
+    # 2. Match <tool_call>{...}</tool_call>
     match = re.search(r"<tool_call>\s*(\{.*?\})\s*(?:</tool_call>|$)", response_text, re.DOTALL)
     if match:
         try:
@@ -68,7 +90,7 @@ def extract_tool_call(response_text: str):
         except json.JSONDecodeError:
             pass
 
-    # 2. Pure XML Tags: <tool>read_file</tool><args><path>llm.py</path></args>
+    # 3. Pure XML Tags: <tool>read_file</tool><args><path>llm.py</path></args>
     tool_tag_match = re.search(r"<tool>\s*(\w+)\s*</tool>", response_text)
     if tool_tag_match:
         tool_name = tool_tag_match.group(1).strip()
@@ -84,7 +106,7 @@ def extract_tool_call(response_text: str):
         if tool_name in ["read_file", "write_file", "str_replace", "run_cmd"]:
             return {"tool": tool_name, "args": args_dict}
 
-    # 3. Fallback: Search for any JSON block containing "tool" and "args"
+    # 4. Fallback: Search for any embedded JSON block containing "tool" and "args"
     json_match = re.search(r'(\{\s*"tool"\s*:\s*".*?"\s*,\s*"args"\s*:\s*\{.*?\}\s*\})', response_text, re.DOTALL)
     if json_match:
         try:
@@ -94,7 +116,7 @@ def extract_tool_call(response_text: str):
         except json.JSONDecodeError:
             pass
 
-    # 4. Fallback: Native Python AST Parsing (handles ```python ... ``` code blocks safely)
+    # 5. Fallback: Native Python AST Parsing (handles ```python ... ``` code blocks safely)
     code_text = response_text
     code_block_match = re.search(r"```(?:python)?\s*(.*?)\s*```", response_text, re.DOTALL)
     if code_block_match:
