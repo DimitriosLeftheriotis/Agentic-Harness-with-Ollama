@@ -1,3 +1,4 @@
+import ast
 import json
 import re
 
@@ -10,30 +11,29 @@ client = OpenAI(
     api_key=OLLAMA_API_KEY  # required by the client but unused by Ollama
 )
 
-# 2. System prompt tuned for 7B/14B Qwen models
-SYSTEM_PROMPT = """You are a precise coding agent working in the user's project directory.
+# 2. System prompt tuned for 7B/14B Qwen models with Few-Shot demonstration
+SYSTEM_PROMPT = """You are a coding agent that executes tasks by calling tools.
 
-When you need to take an action, output EXACTLY ONE tool call in this XML format:
-<tool_call>
-{"tool": "tool_name", "args": {"key": "value"}}
-</tool_call>
+To use a tool, you MUST output ONLY a <tool_call> XML block with JSON. Do NOT write conversational text or python code blocks before the tool call.
 
 Available Tools:
-1. read_file(path: str, offset: int = 1, limit: int = 60)
-    - Read lines of a file with line numbers.
-2. write_file(path: str, content: str)
-    - Create a new file or completely overwrite an existing one.
-3. str_replace(path: str, old_str: str, new_str: str)
-    - Replace an exact unique string in a file with new text.
-4. run_cmd(command: str)
-    - Execute a shell command in the current directory.
+- read_file(path: str, offset: int = 1, limit: int = 60)
+- write_file(path: str, content: str)
+- str_replace(path: str, old_str: str, new_str: str)
+- run_cmd(command: str)
 
-CRITICAL RULES:
-- If you need to use a tool, start your response IMMEDIATELY with <tool_call>. Do NOT write conversational text before the tool call.
-- Output ONLY ONE <tool_call> per message.
+EXAMPLE TURN:
+User: Create a file named hello.py with print('hi')
+Assistant:
+<tool_call>
+{"tool": "write_file", "args": {"path": "hello.py", "content": "print('hi')\\n"}}
+</tool_call>
+
+RULES:
+- When you need to take an action, output ONLY the <tool_call>.
 - STOP generating immediately after </tool_call>.
-- NEVER invent or hallucinate tool output. Wait for the user/system to execute it.
-- When you are finished or do not need a tool, reply with regular conversational text.
+- NEVER invent tool outputs yourself. Wait for execution results.
+- When finished, reply with regular text.
 """
 
 # 3. The LLM Caller Function
@@ -58,11 +58,11 @@ def generate_response(messages: list, model: str = DEFAULT_MODEL, temperature: f
 
     return text
 
-# 4. The XML / JSON Tool Call Extractor
+# 4. Multi-Format Tool Call Extractor (XML, JSON, & Python syntax)
 def extract_tool_call(response_text: str):
     """
-    Extracts the tool call from <tool_call> tags OR fallback raw JSON blocks.
-    Returns: dict {"tool": "...", "args": {...}} or None if no tool was called.
+    Extracts tool calls from XML tags, raw JSON, or direct Python call syntax.
+    Returns: dict {"tool": "...", "args": {...}} or None.
     """
     # 1. Primary: Match <tool_call>{...}</tool_call> (or unclosed tag)
     match = re.search(r"<tool_call>\s*(\{.*?\})\s*(?:</tool_call>|$)", response_text, re.DOTALL)
@@ -83,5 +83,36 @@ def extract_tool_call(response_text: str):
                 return data
         except json.JSONDecodeError:
             pass
+
+    # 3. Fallback: Python-style function call like write_file("hello.py", "...")
+    for tool_name in ["read_file", "write_file", "str_replace", "run_cmd"]:
+        py_match = re.search(rf'\b{tool_name}\s*\((.*?)\)', response_text, re.DOTALL)
+        if py_match:
+            try:
+                fake_call = f"{tool_name}({py_match.group(1)})"
+                tree = ast.parse(fake_call)
+                call_node = tree.body[0].value
+                args_dict = {}
+
+                if tool_name == "write_file" and len(call_node.args) >= 2:
+                    args_dict = {
+                        "path": ast.literal_eval(call_node.args[0]),
+                        "content": ast.literal_eval(call_node.args[1])
+                    }
+                elif tool_name == "read_file" and len(call_node.args) >= 1:
+                    args_dict = {"path": ast.literal_eval(call_node.args[0])}
+                elif tool_name == "run_cmd" and len(call_node.args) >= 1:
+                    args_dict = {"command": ast.literal_eval(call_node.args[0])}
+                elif tool_name == "str_replace" and len(call_node.args) >= 3:
+                    args_dict = {
+                        "path": ast.literal_eval(call_node.args[0]),
+                        "old_str": ast.literal_eval(call_node.args[1]),
+                        "new_str": ast.literal_eval(call_node.args[2])
+                    }
+
+                if args_dict:
+                    return {"tool": tool_name, "args": args_dict}
+            except Exception:
+                pass
 
     return None
