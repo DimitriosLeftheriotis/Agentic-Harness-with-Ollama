@@ -30,8 +30,7 @@ Assistant:
 </tool_call>
 
 RULES:
-- When you need to take an action, output ONLY the <tool_call>.
-- STOP generating immediately after closing tags.
+- When you need to take an action, output ONLY the tool call.
 - NEVER invent tool outputs yourself. Wait for execution results.
 - When finished, reply with regular text.
 """
@@ -40,24 +39,14 @@ RULES:
 def generate_response(messages: list, model: str = DEFAULT_MODEL, temperature: float = DEFAULT_TEMPERATURE) -> str:
     """
     Sends the conversation history to Ollama and returns the generated text.
-    Enforces stop tokens to prevent tool hallucination.
     """
     response = client.chat.completions.create(
         model=model,
         messages=messages,
-        temperature=temperature,
-        stop=["</tool_call>", "</args>"]
+        temperature=temperature
     )
 
-    text = response.choices[0].message.content or ""
-
-    # If the model hit a stop sequence, re-attach it so parsers have complete blocks
-    if "<tool_call>" in text and not text.strip().endswith("</tool_call>"):
-        text = text.strip() + "\n</tool_call>"
-    elif "<args>" in text and not text.strip().endswith("</args>"):
-        text = text.strip() + "\n</args>"
-
-    return text
+    return response.choices[0].message.content or ""
 
 # 4. Multi-Format Tool Call Extractor (XML tags, JSON, & Native Python AST)
 def extract_tool_call(response_text: str):
