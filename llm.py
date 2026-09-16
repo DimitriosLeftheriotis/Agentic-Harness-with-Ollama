@@ -49,6 +49,9 @@ def generate_response(messages: list, model: str = DEFAULT_MODEL, temperature: f
     choice = response.choices[0]
     message = choice.message
 
+    # DEBUG: Print exact raw response structure from Ollama
+    print(f"\n[DEBUG OLLAMA RAW]: finish_reason={choice.finish_reason} | message={message}\n")
+
     # 1. Check for Native Ollama / OpenAI Tool Calls (Standard in 14B models)
     if message.tool_calls:
         tool_call = message.tool_calls[0]
