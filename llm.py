@@ -46,7 +46,7 @@ def generate_response(messages: list, model: str = DEFAULT_MODEL, temperature: f
         model=model,
         messages=messages,
         temperature=temperature,
-        stop=["</tool_call>", "</args>", "</xml>"]
+        stop=["</tool_call>", "</args>"]
     )
 
     text = response.choices[0].message.content or ""
@@ -54,7 +54,7 @@ def generate_response(messages: list, model: str = DEFAULT_MODEL, temperature: f
     # If the model hit a stop sequence, re-attach it so parsers have complete blocks
     if "<tool_call>" in text and not text.strip().endswith("</tool_call>"):
         text = text.strip() + "\n</tool_call>"
-    elif "<args>" in text and not text.strip().endswith("</args>") and not text.strip().endswith("</xml>"):
+    elif "<args>" in text and not text.strip().endswith("</args>"):
         text = text.strip() + "\n</args>"
 
     return text
@@ -85,10 +85,9 @@ def extract_tool_call(response_text: str):
         tool_name = tool_tag_match.group(1).strip()
         args_dict = {}
 
-        args_block_match = re.search(r"<args>\s*(.*?)\s*(?:</args>|</xml>|$)", response_text, re.DOTALL)
+        args_block_match = re.search(r"<args>\s*(.*?)\s*(?:</args>|$)", response_text, re.DOTALL)
         if args_block_match:
             args_content = args_block_match.group(1)
-            # Match each <param_name>param_value</param_name>
             param_matches = re.findall(r"<(\w+)>\s*(.*?)\s*</\1>", args_content, re.DOTALL)
             for param_name, param_val in param_matches:
                 args_dict[param_name] = param_val.strip()

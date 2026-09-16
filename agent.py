@@ -93,14 +93,16 @@ def main():
                 history.save_session()
                 continue
 
-            # CASE B: Normal Text Response
+            # CASE B: Normal Text Response (Task Complete)
             else:
                 history.add_assistant_message(response_text)
                 history.save_session()
 
-                clean_reply = re.sub(r"```xml.*?```|<tool_call>.*?</tool_call>|<tool>.*?</args>|<tool>.*?</tool>", "", response_text, flags=re.DOTALL).strip()
-                if clean_reply:
-                    print(f"\nAgent > {clean_reply}")
+                # Clean only dangling tool tags, preserving all markdown and code blocks
+                clean_reply = re.sub(r"<tool_call>.*?</tool_call>|<tool>.*?</args>", "", response_text, flags=re.DOTALL).strip()
+                final_text = clean_reply if clean_reply else response_text.strip()
+                if final_text:
+                    print(f"\nAgent > {final_text}")
                 break
 
 if __name__ == "__main__":
