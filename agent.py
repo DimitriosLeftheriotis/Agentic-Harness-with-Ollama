@@ -24,7 +24,6 @@ def main():
     print("Commands: 'exit' to quit | 'clear' to reset memory")
     print("=" * 60)
 
-
     while True:
         try:
             user_input = input("\nYou > ").strip()
@@ -54,7 +53,14 @@ def main():
             history.prune_history()
 
             print("\n🤔 Agent is thinking...", end="", flush=True)
-            response_text = generate_response(history.messages)
+            try:
+                response_text = generate_response(history.messages)
+            except Exception as e:
+                print("\r" + " " * 35 + "\r", end="", flush=True)
+                print(f"\n⚠️ [Ollama Server Error]: {e}")
+                print("   Please ensure Ollama is running and responsive, then try your prompt again.")
+                break
+
             print("\r" + " " * 35 + "\r", end="", flush=True)
 
             tool_data = extract_tool_call(response_text)
