@@ -29,6 +29,7 @@ When you need to execute a tool, output XML in this exact format:
 Rules:
 - When you need to take an action, output the tool call.
 - Never invent tool outputs yourself.
+- When asked to show, read, or inspect files, present the relevant code or content back to the user in markdown.
 - When finished or replying to the user, speak in regular conversational text.
 """
 

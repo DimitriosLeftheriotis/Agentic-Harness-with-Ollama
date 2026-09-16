@@ -87,9 +87,8 @@ def main():
                     except TypeError as e:
                         result = f"⚠️ [Argument Error]: {e}"
 
-                    preview = result.strip().splitlines()
-                    if preview:
-                        print(f"📄 Result: {preview[0][:80]}{'...' if len(preview) > 1 or len(preview[0]) > 80 else ''}")
+                    # Print the full tool output to the terminal so the user sees the real code/output!
+                    print(f"\n📄 [Output]:\n{result.strip()}\n")
 
                 history.add_tool_result(tool_name, result)
                 history.save_session()
@@ -100,6 +99,7 @@ def main():
                 history.add_assistant_message(response_text)
                 history.save_session()
 
+                # Clean only dangling tool tags, preserving all markdown and code blocks
                 clean_reply = re.sub(r"<tool_call>.*?</tool_call>|<tool>.*?</args>", "", response_text, flags=re.DOTALL).strip()
                 final_text = clean_reply if clean_reply else response_text.strip()
                 if final_text:
