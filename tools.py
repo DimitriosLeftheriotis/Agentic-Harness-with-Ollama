@@ -29,11 +29,14 @@ def run_cmd(command: str) -> str:
             shell=True,                                                                                                                                               
             capture_output=True,                                                                                                                                      
             text=True,                                                                                                                                                
+            errors="replace",                                                                                                                                         
             timeout=COMMAND_TIMEOUT  # From config.py (30 seconds)                                                                                                    
         )                                                                                                                                                             
                                                                                                                                                                         
-        output = result.stdout + result.stderr                                                                                                                        
-        output = output.strip() if output else "(Command executed with no output)"                                                                                    
+        stdout = result.stdout or ""                                                                                                                                  
+        stderr = result.stderr or ""                                                                                                                                  
+        output = (stdout + "\n" + stderr).strip() if stderr else stdout.strip()                                                                                       
+        output = output if output else "(Command executed with no output)"                                                                                    
                                                                                                                                                                         
         # Protect the context window from huge terminal dumps                                                                                                         
         return truncate_output(output)                                                                                                                                
