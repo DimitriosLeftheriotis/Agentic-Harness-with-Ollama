@@ -49,19 +49,21 @@ def main():
         history.add_user_message(user_input)
 
         # --- INNER AGENTIC LOOP ---
+        step_count = 0
         while True:
+            step_count += 1
             history.prune_history()
 
-            print("\n🤔 Agent is thinking...", end="", flush=True)
+            print(f"\n🤔 Agent is thinking (step {step_count})...", end="", flush=True)
             try:
                 response_text = generate_response(history.messages)
             except Exception as e:
-                print("\r" + " " * 35 + "\r", end="", flush=True)
+                print("\r" + " " * 45 + "\r", end="", flush=True)
                 print(f"\n⚠️ [Ollama Server Error]: {e}")
                 print("   Please ensure Ollama is running and responsive, then try your prompt again.")
                 break
 
-            print("\r" + " " * 35 + "\r", end="", flush=True)
+            print("\r" + " " * 45 + "\r", end="", flush=True)
 
             tool_data = extract_tool_call(response_text)
 
@@ -98,11 +100,12 @@ def main():
                 history.add_assistant_message(response_text)
                 history.save_session()
 
-                # Clean only dangling tool tags, preserving all markdown and code blocks
                 clean_reply = re.sub(r"<tool_call>.*?</tool_call>|<tool>.*?</args>", "", response_text, flags=re.DOTALL).strip()
                 final_text = clean_reply if clean_reply else response_text.strip()
                 if final_text:
                     print(f"\nAgent > {final_text}")
+                else:
+                    print(f"\nAgent > (Empty response from model. Raw text: {repr(response_text)})")
                 break
 
 if __name__ == "__main__":
