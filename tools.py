@@ -47,7 +47,7 @@ def run_cmd(command: str) -> str:
         return f"⚠️ [Tool Error]: {e}"
 
 
-def read_file(path: str, offset: int = 1, limit: int = 60) -> str:
+def read_file(path: str, offset: int = 1, limit: int = 100) -> str:
     try:
         offset = int(offset)
         limit = int(limit)
@@ -69,7 +69,11 @@ def read_file(path: str, offset: int = 1, limit: int = 60) -> str:
         for i, line in enumerate(selected_lines, start=start_idx + 1):
             output.append(f"{i:4d} | {line}")
 
-        header = f"--- File: {path} (Showing lines {start_idx + 1}-{end_idx} of {total_lines}) ---\n"
+        if end_idx < total_lines:
+            header = f"--- File: {path} (Showing lines {start_idx + 1}-{end_idx} of {total_lines}. Next offset: {end_idx + 1}) ---\n"
+        else:
+            header = f"--- File: {path} (Showing lines {start_idx + 1}-{end_idx} of {total_lines} [End of file]) ---\n"
+
         return header + "".join(output)
 
     except Exception as e:

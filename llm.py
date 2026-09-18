@@ -15,7 +15,7 @@ client = OpenAI(
 SYSTEM_PROMPT = """You are a coding agent working in the user's project directory.
 
 Available Tools:
-1. read_file(path: str, offset: int = 1, limit: int = 60)
+1. read_file(path: str, offset: int = 1, limit: int = 100)
 2. write_file(path: str, content: str)
 3. str_replace(path: str, old_str: str, new_str: str)
 4. run_cmd(command: str)
@@ -27,6 +27,13 @@ Examples:
 <path>llm.py</path>
 </args>
 
+To read beyond line 100 in a long file:
+<tool>read_file</tool>
+<args>
+<path>llm.py</path>
+<offset>101</offset>
+</args>
+
 <tool>run_cmd</tool>
 <args>
 <command>dir</command>
@@ -34,9 +41,10 @@ Examples:
 
 Rules:
 - When you need to take an action, output the tool call.
-- Use the exact argument names (path, content, old_str, new_str, command).
+- Use the exact argument names (path, offset, limit, content, old_str, new_str, command).
 - Never invent tool outputs yourself.
-- When asked to show, read, or inspect files, present the relevant code or content back to the user in markdown.
+- Do not repeatedly call the same tool with the exact same arguments.
+- When asked to show, read, or inspect files, present the relevant code or content back to the user in markdown once you have read it.
 - When finished or replying to the user, speak in regular conversational text.
 """
 
@@ -83,13 +91,22 @@ def normalize_tool_args(tool_name: str, args_dict: dict) -> dict:
         args_dict[k] = v
 
     # Case 2: Model output <arg_name>llm.py</arg_name> or generic keys
-    if tool_name == "read_file" and "path" not in args_dict:
-        for possible_key in ["arg_name", "file", "filename", "filepath", "value"]:
-            if possible_key in args_dict:
-                args_dict["path"] = args_dict.pop(possible_key)
-                break
-        if "path" not in args_dict and len(args_dict) == 1:
-            args_dict["path"] = list(args_dict.values())[0]
+    if tool_name == "read_file":
+        if "path" not in args_dict:
+            for possible_key in ["arg_name", "file", "filename", "filepath", "value"]:
+                if possible_key in args_dict:
+                    args_dict["path"] = args_dict.pop(possible_key)
+                    break
+            if "path" not in args_dict and len(args_dict) == 1:
+                args_dict["path"] = list(args_dict.values())[0]
+
+        for offset_key in ["start", "start_line", "from_line"]:
+            if offset_key in args_dict and "offset" not in args_dict:
+                args_dict["offset"] = args_dict.pop(offset_key)
+
+        for limit_key in ["lines", "count", "num_lines"]:
+            if limit_key in args_dict and "limit" not in args_dict:
+                args_dict["limit"] = args_dict.pop(limit_key)
 
     elif tool_name == "run_cmd" and "command" not in args_dict:
         for possible_key in ["cmd", "arg_name", "value"]:
@@ -191,6 +208,10 @@ def extract_tool_call(response_text: str):
                         }
                     elif tool_name == "read_file" and len(node.args) >= 1:
                         args_dict = {"path": ast.literal_eval(node.args[0])}
+                        if len(node.args) >= 2:
+                            args_dict["offset"] = ast.literal_eval(node.args[1])
+                        if len(node.args) >= 3:
+                            args_dict["limit"] = ast.literal_eval(node.args[2])
                     elif tool_name == "run_cmd" and len(node.args) >= 1:
                         args_dict = {"command": ast.literal_eval(node.args[0])}
                     elif tool_name == "str_replace" and len(node.args) >= 3:
@@ -199,6 +220,14 @@ def extract_tool_call(response_text: str):
                             "old_str": ast.literal_eval(node.args[1]),
                             "new_str": ast.literal_eval(node.args[2])
                         }
+
+                    # Collect keyword args if present (e.g. read_file("llm.py", offset=61))
+                    for kw in node.keywords:
+                        try:
+                            args_dict[kw.arg] = ast.literal_eval(kw.value)
+                        except Exception:
+                            pass
+
                     if args_dict:
                         return {"tool": tool_name, "args": normalize_tool_args(tool_name, args_dict)}
     except Exception:

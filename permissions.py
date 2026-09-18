@@ -65,7 +65,12 @@ def check_permission(tool_name: str, args: dict, auto_approve_reads: bool = True
     if tool_name in ["write_file", "str_replace"]:                                                                                                                    
         path = args.get("path", "")                                                                                                                                   
         print(f"\n🛡️  [Security Gate] AI requests to modify: '{path}' using '{tool_name}'")                                                                           
-        choice = input("    Allow this file change? [y/N]: ").strip().lower()                                                                                         
+        try:
+            choice = input("    Allow this file change? [y/N]: ").strip().lower()
+        except (KeyboardInterrupt, EOFError):
+            print()
+            return False, f"⚠️ [User Cancelled]: Action aborted by user (Ctrl+C)."
+
         if choice in ["y", "yes"]:                                                                                                                                    
             return True, ""                                                                                                                                           
         return False, f"⚠️ [User Rejected]: Permission denied by user for {tool_name} on '{path}'."                                                                   
@@ -80,7 +85,12 @@ def check_permission(tool_name: str, args: dict, auto_approve_reads: bool = True
             return False, reason                                                                                                                                      
                                                                                                                                                                         
         print(f"\n🛡️  [Security Gate] AI requests to run command: '{command}'")                                                                                       
-        choice = input("    Allow execution? [y/N]: ").strip().lower()                                                                                                
+        try:
+            choice = input("    Allow execution? [y/N]: ").strip().lower()
+        except (KeyboardInterrupt, EOFError):
+            print()
+            return False, f"⚠️ [User Cancelled]: Action aborted by user (Ctrl+C)."
+
         if choice in ["y", "yes"]:                                                                                                                                    
             return True, ""                                                                                                                                           
         return False, f"⚠️ [User Rejected]: Permission denied by user to run '{command}'."                                                                            
