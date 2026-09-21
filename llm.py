@@ -11,7 +11,7 @@ client = OpenAI(
     api_key=OLLAMA_API_KEY  # required by the client but unused by Ollama
 )
 
-# 2. Concrete System prompt for 7B/14B Qwen models
+# 2. Concrete System prompt
 SYSTEM_PROMPT = """You are a coding agent working in the user's project directory.
 
 Available Tools:

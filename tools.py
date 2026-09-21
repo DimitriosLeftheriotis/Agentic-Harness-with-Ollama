@@ -4,7 +4,7 @@ from config import COMMAND_TIMEOUT, MAX_OUTPUT_LINES
                                                                                                                                                                         
 def truncate_output(text: str, max_lines: int = MAX_OUTPUT_LINES) -> str:                                                                                             
     """                                                                                                                                                               
-    Truncates large text to protect the 7B/14B context window.                                                                                                        
+    Truncates large text to protect context window.                                                                                                        
     Keeps the first half and last half, summarizing the middle.                                                                                                       
     """                                                                                                                                                               
     lines = text.splitlines()                                                                                                                                         

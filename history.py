@@ -62,7 +62,7 @@ class ConversationHistory:
     def prune_history(self, max_messages: int = 14):
                 """
                 Compacts older intermediate tool outputs and limits message stack size
-                to keep the 7B/14B model fast and prevent context overflow.
+                to keep the model fast and prevent context overflow.
                 """
                 if len(self.messages) <= max_messages:
                     return
@@ -83,3 +83,4 @@ class ConversationHistory:
 
                 # 4. Reconstruct the message stack: System Prompt + Compacted Recent Messages
                 self.messages = [system_msg] + recent_messages
+
