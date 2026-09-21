@@ -2,7 +2,7 @@
 
 A lightweight, fully transparent AI coding agent that runs **locally** using [Ollama](https://ollama.ai) and small open-source models (7B/14B parameters).
 
-Built from scratch to be understood line by line — no heavy frameworks, no magic, no cloud dependencies.
+Built from scratch without heavy frameworks and cloud dependencies.
 
 ## Why This Exists
 
@@ -29,7 +29,7 @@ This harness strips everything down to the minimum a small model needs to work r
 ```
 config.py        → Settings (model, endpoint, timeouts)
 llm.py           → System prompt, LLM caller, tool call parser
-tools.py         → Tool implementations (read, write, replace, run)
+tools.py         → Tool implementations (read, write, replace, run terminal commands)
 permissions.py   → Security gates (path sandbox, command filter, user approval)
 history.py       → Conversation history with pruning and persistence
 agent.py         → Interactive CLI REPL with agentic tool loop
