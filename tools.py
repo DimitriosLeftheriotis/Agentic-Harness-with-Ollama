@@ -30,7 +30,8 @@ def run_cmd(command: str) -> str:
             capture_output=True,                                                                                                                                      
             text=True,                                                                                                                                                
             errors="replace",                                                                                                                                         
-            timeout=COMMAND_TIMEOUT  # From config.py (30 seconds)                                                                                                    
+            timeout=COMMAND_TIMEOUT,
+            cwd=os.getcwd()  # Explicitly pin to project root
         )                                                                                                                                                             
                                                                                                                                                                         
         stdout = result.stdout or ""                                                                                                                                  
@@ -80,50 +81,50 @@ def read_file(path: str, offset: int = 1, limit: int = 100) -> str:
         return f"⚠️ [Tool Error reading '{path}']: {e}"
 
 
-def write_file(path: str, content: str) -> str:                                                                                                                                                                                                                     
-        try:                                                                                                                                                                                                                                                            
-            parent_dir = os.path.dirname(path)                                                                                                                                                                                                                          
-            if parent_dir and not os.path.exists(parent_dir):                                                                                                                                                                                                           
-                os.makedirs(parent_dir, exist_ok=True)                                                                                                                                                                                                                  
-                                                                                                                                                                                                                                                                        
-            with open(path, "w", encoding="utf-8") as f:                                                                                                                                                                                                                
-                f.write(content)                                                                                                                                                                                                                                        
-                                                                                                                                                                                                                                                                        
-            line_count = len(content.splitlines())                                                                                                                                                                                                                      
-            byte_count = len(content.encode("utf-8"))                                                                                                                                                                                                                   
-            return f"✅ Successfully wrote {line_count} lines ({byte_count} bytes) to '{path}'."                                                                                                                                                                        
-                                                                                                                                                                                                                                                                        
-        except Exception as e:                                                                                                                                                                                                                                          
-            return f"⚠️ [Tool Error writing to '{path}']: {e}"
+def write_file(path: str, content: str) -> str:
+    try:
+        parent_dir = os.path.dirname(path)
+        if parent_dir and not os.path.exists(parent_dir):
+            os.makedirs(parent_dir, exist_ok=True)
+
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(content)
+
+        line_count = len(content.splitlines())
+        byte_count = len(content.encode("utf-8"))
+        return f"✅ Successfully wrote {line_count} lines ({byte_count} bytes) to '{path}'."
+
+    except Exception as e:
+        return f"⚠️ [Tool Error writing to '{path}']: {e}"
 
 
-def str_replace(path: str, old_str: str, new_str: str) -> str:                                                                                                                                                                                                      
-        try:                                                                                                                                                                                                                                                            
-            if not os.path.exists(path):                                                                                                                                                                                                                                
-                return f"⚠️ [Tool Error]: File '{path}' does not exist."                                                                                                                                                                                                
-                                                                                                                                                                                                                                                                        
-            with open(path, "r", encoding="utf-8", errors="replace") as f:                                                                                                                                                                                              
-                content = f.read()                                                                                                                                                                                                                                      
-                                                                                                                                                                                                                                                                        
-            # 1. Check if the target text actually exists                                                                                                                                                                                                               
-            count = content.count(old_str)                                                                                                                                                                                                                              
-            if count == 0:                                                                                                                                                                                                                                              
-                return f"⚠️ [Tool Error]: The specified old_str was not found in '{path}'. Make sure the indentation and wording match the file exactly."                                                                                                               
-                                                                                                                                                                                                                                                                        
-            # 2. Check for uniqueness to prevent accidental edits                                                                                                                                                                                                       
-            if count > 1:                                                                                                                                                                                                                                               
-                return f"⚠️ [Tool Error]: The specified old_str appears {count} times in '{path}'. Please include more surrounding context lines so the target is unique."                                                                                              
-                                                                                                                                                                                                                                                                        
-            # 3. Perform the single replacement                                                                                                                                                                                                                         
-            new_content = content.replace(old_str, new_str, 1)                                                                                                                                                                                                          
-                                                                                                                                                                                                                                                                        
-            with open(path, "w", encoding="utf-8") as f:                                                                                                                                                                                                                
-                f.write(new_content)                                                                                                                                                                                                                                    
-                                                                                                                                                                                                                                                                        
-            return f"✅ Successfully updated '{path}'."                                                                                                                                                                                                                 
-                                                                                                                                                                                                                                                                        
-        except Exception as e:                                                                                                                                                                                                                                          
-            return f"⚠️ [Tool Error editing '{path}']: {e}"     
+def str_replace(path: str, old_str: str, new_str: str) -> str:
+    try:
+        if not os.path.exists(path):
+            return f"⚠️ [Tool Error]: File '{path}' does not exist."
+
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
+            content = f.read()
+
+        # 1. Check if the target text actually exists
+        count = content.count(old_str)
+        if count == 0:
+            return f"⚠️ [Tool Error]: The specified old_str was not found in '{path}'. Make sure the indentation and wording match the file exactly."
+
+        # 2. Check for uniqueness to prevent accidental edits
+        if count > 1:
+            return f"⚠️ [Tool Error]: The specified old_str appears {count} times in '{path}'. Please include more surrounding context lines so the target is unique."
+
+        # 3. Perform the single replacement
+        new_content = content.replace(old_str, new_str, 1)
+
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(new_content)
+
+        return f"✅ Successfully updated '{path}'."
+
+    except Exception as e:
+        return f"⚠️ [Tool Error editing '{path}']: {e}"     
 
 
 # --- The Tool Registry ---                                                                                                                                                                                                               

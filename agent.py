@@ -4,7 +4,7 @@ sys.stdout.reconfigure(encoding="utf-8")
 
 import json
 import re
-from config import DEFAULT_MODEL, OLLAMA_BASE_URL
+from config import DEFAULT_MODEL, OLLAMA_BASE_URL, MAX_AGENT_STEPS
 from llm import generate_response, extract_tool_call
 from tools import TOOL_REGISTRY
 from permissions import check_permission
@@ -56,6 +56,12 @@ def main():
 
             while True:
                 step_count += 1
+
+                # SAFETY: Hard cap on autonomous steps to prevent infinite loops
+                if step_count > MAX_AGENT_STEPS:
+                    print(f"\n⚠️ [Safety Limit]: Agent hit the maximum step count ({MAX_AGENT_STEPS}). Returning to prompt.")
+                    break
+
                 history.prune_history()
 
                 print(f"\n🤔 Agent is thinking (step {step_count})...", end="", flush=True)

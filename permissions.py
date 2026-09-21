@@ -14,7 +14,7 @@ def is_safe_path(target_path: str, base_dir: str = None) -> bool:
     abs_target = os.path.abspath(os.path.join(abs_base, target_path))                                                                                   
                                                                                                                                                         
     # Check if the target path starts with the project directory path                                                                                   
-    return abs_target.startswith(abs_base) 
+    return abs_target == abs_base or abs_target.startswith(abs_base + os.sep) 
 
 
 # List of regex patterns for destructive terminal commands across Windows and Linux                                                                  

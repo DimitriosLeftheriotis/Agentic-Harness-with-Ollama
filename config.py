@@ -15,3 +15,4 @@ DEFAULT_TEMPERATURE = 0.1
 # Tool Execution Settings
 COMMAND_TIMEOUT = 30  # Max seconds for a shell command before killing it
 MAX_OUTPUT_LINES = 60  # Truncate tool output if it exceeds 60 lines
+MAX_AGENT_STEPS = 10  # Max autonomous tool calls per user prompt before forcing a stop
